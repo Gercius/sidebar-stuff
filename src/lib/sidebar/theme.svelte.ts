@@ -239,6 +239,12 @@ export class ThemeStore {
 	 * demo state; it never changes the tree.
 	 */
 	activeItemId = $state<string | null>(null);
+	#beforeChange: (() => void) | null = null;
+
+	/** Connect document history so theme edits share Undo/Redo with tree edits. */
+	setBeforeChange(callback: (() => void) | null): void {
+		this.#beforeChange = callback;
+	}
 
 	/** The available presets. */
 	get presets(): ThemePreset[] {
@@ -284,6 +290,11 @@ export class ThemeStore {
 
 	/** Shallow-merge a patch into the current theme. */
 	update(patch: Partial<Theme>): void {
+		const changed = Object.entries(patch).some(
+			([key, value]) => JSON.stringify(this.current[key as keyof Theme]) !== JSON.stringify(value)
+		);
+		if (!changed) return;
+		this.#beforeChange?.();
 		Object.assign(this.current, patch);
 	}
 
@@ -291,6 +302,11 @@ export class ThemeStore {
 	updateLevel(index: number, patch: Partial<LevelStyle>): void {
 		const level = this.current.levels[index];
 		if (!level) return;
+		const changed = Object.entries(patch).some(
+			([key, value]) => JSON.stringify(level[key as keyof LevelStyle]) !== JSON.stringify(value)
+		);
+		if (!changed) return;
+		this.#beforeChange?.();
 		Object.assign(level, patch);
 	}
 
@@ -298,12 +314,16 @@ export class ThemeStore {
 	applyPreset(id: string): boolean {
 		const preset = THEME_PRESETS.find((candidate) => candidate.id === id);
 		if (!preset) return false;
+		if (JSON.stringify(this.current) === JSON.stringify(preset.theme)) return true;
+		this.#beforeChange?.();
 		this.current = cloneTheme(preset.theme);
 		return true;
 	}
 
 	/** Restore the built-in default theme. */
 	reset(): void {
+		if (JSON.stringify(this.current) === JSON.stringify(DEFAULT_THEME)) return;
+		this.#beforeChange?.();
 		this.current = cloneTheme(DEFAULT_THEME);
 	}
 

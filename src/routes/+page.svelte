@@ -10,23 +10,45 @@
 	import ThemePanel from '../lib/builder/ThemePanel.svelte';
 	import Toolbar from '../lib/builder/Toolbar.svelte';
 	import Sidebar from '../lib/sidebar/components/Sidebar.svelte';
+	import {
+		applyDocument,
+		createDebouncedSave,
+		loadDocument,
+		serializeDocument
+	} from '../lib/sidebar/persistence';
 	import { getSidebarStore } from '../lib/sidebar/store.svelte';
 	import { getThemeStore } from '../lib/sidebar/theme.svelte';
 	import { findItem } from '../lib/sidebar/tree';
 
 	const store = getSidebarStore();
 	const theme = getThemeStore();
+	store.attachThemeStore(theme);
+	theme.setBeforeChange(() => store.recordExternalChange());
+
+	// Restore the previously saved document; otherwise keep the sample tree and
+	// default theme the stores start with.
+	const saved = loadDocument();
+	if (saved) applyDocument(store, theme, saved, { recordHistory: false });
+
+	// Auto-save { tree, theme } to localStorage. Debounced so rapid edits (typing,
+	// dragging, slider scrubbing) collapse into a single write. Reading the live
+	// state inside the effect is what subscribes it to every change.
+	const scheduleSave = createDebouncedSave();
+	$effect(() => {
+		scheduleSave(serializeDocument(store.tree, theme.current));
+	});
 
 	/** Which right-hand panel is visible. */
 	let panel = $state<'inspector' | 'theme'>('inspector');
 
-	/** True when the event originates from a text field or editable element. */
+	/** True when the event originates from a text editor with native undo behavior. */
 	function isTyping(event: KeyboardEvent): boolean {
 		const target = event.target;
-		return (
-			target instanceof HTMLElement &&
-			(target.closest('input, textarea, select') !== null || target.isContentEditable)
+		if (!(target instanceof HTMLElement)) return false;
+		const textEditor = target.closest(
+			'textarea, input:not([type]), input[type="text"], input[type="search"], input[type="url"], input[type="tel"], input[type="email"], input[type="password"]'
 		);
+		return textEditor !== null || target.isContentEditable;
 	}
 
 	/** Delete an item, confirming first when it has children. */

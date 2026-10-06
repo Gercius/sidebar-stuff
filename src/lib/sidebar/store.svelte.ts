@@ -10,6 +10,7 @@
 
 import { getContext, hasContext, setContext } from 'svelte';
 import { MAX_DEPTH, createSampleTree, levels } from './config';
+import { cloneTheme, type Theme, type ThemeStore } from './theme.svelte';
 import {
 	canDrop,
 	cloneWithNewIds,
@@ -28,6 +29,11 @@ const HISTORY_LIMIT = 100;
 
 /** Label assigned to freshly created items. */
 const DEFAULT_LABEL = 'New item';
+
+interface DocumentSnapshot {
+	tree: SidebarItem[];
+	theme: Theme | null;
+}
 
 /** Fields an item patch may change. `id` and `children` are managed by the store. */
 export type SidebarItemPatch = Partial<Omit<SidebarItem, 'id' | 'children'>>;
@@ -61,11 +67,12 @@ export class SidebarStore {
 	menuId = $state<string | null>(null);
 
 	/** Undo stack. Uses `$state.raw` so history snapshots are not deeply proxied. */
-	#past = $state.raw<SidebarItem[][]>([]);
+	#past = $state.raw<DocumentSnapshot[]>([]);
 	/** Redo stack. */
-	#future = $state.raw<SidebarItem[][]>([]);
+	#future = $state.raw<DocumentSnapshot[]>([]);
 	/** Tree snapshot taken at the start of an inline edit session. */
-	#editSnapshot: SidebarItem[] | null = null;
+	#editSnapshot: DocumentSnapshot | null = null;
+	#themeStore: ThemeStore | null = null;
 
 	/** Whether {@link undo} can do anything. */
 	get canUndo(): boolean {
@@ -89,7 +96,7 @@ export class SidebarStore {
 	 */
 	beginEdit(id: string): void {
 		if (!findItem(this.tree, id)) return;
-		this.#editSnapshot = $state.snapshot(this.tree) as SidebarItem[];
+		this.#editSnapshot = this.#snapshot();
 		this.selectedId = id;
 		this.editingId = id;
 	}
@@ -106,12 +113,22 @@ export class SidebarStore {
 		if (!snapshot) return;
 
 		if (!commit) {
-			this.tree = snapshot;
+			this.#restore(snapshot);
 			this.#reconcile();
 			return;
 		}
-		if (treeEquals(snapshot, this.tree)) return;
+		if (treeEquals(snapshot.tree, this.tree)) return;
 		this.#record(snapshot);
+	}
+
+	/** Include theme state in item and theme history snapshots. */
+	attachThemeStore(theme: ThemeStore): void {
+		this.#themeStore = theme;
+	}
+
+	/** Record the current document before an external mutation such as a theme edit or import. */
+	recordExternalChange(): void {
+		this.#commit();
 	}
 
 	/** Append a new top-level item, select it and start editing its label. */
@@ -294,8 +311,8 @@ export class SidebarStore {
 		if (this.#past.length === 0) return false;
 		const previous = this.#past[this.#past.length - 1];
 		this.#past = this.#past.slice(0, -1);
-		this.#future = this.#future.concat($state.snapshot(this.tree) as SidebarItem[]);
-		this.tree = previous;
+		this.#future = this.#future.concat(this.#snapshot());
+		this.#restore(previous);
 		this.#afterHistoryNavigation();
 		return true;
 	}
@@ -305,8 +322,8 @@ export class SidebarStore {
 		if (this.#future.length === 0) return false;
 		const next = this.#future[this.#future.length - 1];
 		this.#future = this.#future.slice(0, -1);
-		this.#past = this.#past.concat($state.snapshot(this.tree) as SidebarItem[]);
-		this.tree = next;
+		this.#past = this.#past.concat(this.#snapshot());
+		this.#restore(next);
 		this.#afterHistoryNavigation();
 		return true;
 	}
@@ -317,14 +334,26 @@ export class SidebarStore {
 
 	/** Record the current tree as an undo step and drop the redo stack. */
 	#commit(): void {
-		this.#record($state.snapshot(this.tree) as SidebarItem[]);
+		this.#record(this.#snapshot());
 	}
 
 	/** Push a pre-mutation snapshot onto the undo stack (capped) and clear redo. */
-	#record(snapshot: SidebarItem[]): void {
+	#record(snapshot: DocumentSnapshot): void {
 		const past = this.#past.concat(snapshot);
 		this.#past = past.length > HISTORY_LIMIT ? past.slice(past.length - HISTORY_LIMIT) : past;
 		this.#future = [];
+	}
+
+	#snapshot(): DocumentSnapshot {
+		return {
+			tree: $state.snapshot(this.tree) as SidebarItem[],
+			theme: this.#themeStore ? cloneTheme(this.#themeStore.current) : null
+		};
+	}
+
+	#restore(snapshot: DocumentSnapshot): void {
+		this.tree = snapshot.tree;
+		if (snapshot.theme && this.#themeStore) this.#themeStore.current = cloneTheme(snapshot.theme);
 	}
 
 	/** Drop selection/editing/menu state that no longer matches the current tree. */

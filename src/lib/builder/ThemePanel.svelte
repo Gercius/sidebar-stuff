@@ -93,37 +93,76 @@
 		<span class="field-head"
 			><span>Width</span><span class="value">{theme.current.width}px</span></span
 		>
-		<input type="range" min="180" max="420" step="1" bind:value={theme.current.width} />
+		<input
+			type="range"
+			min="180"
+			max="420"
+			step="1"
+			value={theme.current.width}
+			oninput={(event) => theme.update({ width: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"><span>Background</span></span>
-		<input type="color" bind:value={theme.current.background} />
+		<input
+			type="color"
+			value={theme.current.background}
+			oninput={(event) => theme.update({ background: event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Padding</span><span class="value">{theme.current.padding}px</span></span
 		>
-		<input type="range" min="0" max="24" step="1" bind:value={theme.current.padding} />
+		<input
+			type="range"
+			min="0"
+			max="24"
+			step="1"
+			value={theme.current.padding}
+			oninput={(event) => theme.update({ padding: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Border width</span><span class="value">{theme.current.borderWidth}px</span></span
 		>
-		<input type="range" min="0" max="4" step="1" bind:value={theme.current.borderWidth} />
+		<input
+			type="range"
+			min="0"
+			max="4"
+			step="1"
+			value={theme.current.borderWidth}
+			oninput={(event) => theme.update({ borderWidth: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"><span>Border colour</span></span>
-		<input type="color" bind:value={theme.current.borderColor} />
+		<input
+			type="color"
+			value={theme.current.borderColor}
+			oninput={(event) => theme.update({ borderColor: event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Corner radius</span><span class="value">{theme.current.radius}px</span></span
 		>
-		<input type="range" min="0" max="24" step="1" bind:value={theme.current.radius} />
+		<input
+			type="range"
+			min="0"
+			max="24"
+			step="1"
+			value={theme.current.radius}
+			oninput={(event) => theme.update({ radius: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"><span>Shadow</span></span>
-		<select bind:value={theme.current.shadow}>
+		<select
+			value={theme.current.shadow}
+			onchange={(event) => theme.update({ shadow: event.currentTarget.value })}
+		>
 			{#each shadowOptions as option (option.value)}
 				<option value={option.value}>{option.label}</option>
 			{/each}
@@ -133,46 +172,89 @@
 	<h2>Items</h2>
 	<label class="field">
 		<span class="field-head"><span>Text colour</span></span>
-		<input type="color" bind:value={theme.current.itemColor} />
+		<input
+			type="color"
+			value={theme.current.itemColor}
+			oninput={(event) => theme.update({ itemColor: event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"><span>Hover background</span></span>
-		<input type="color" bind:value={theme.current.itemHoverBg} />
+		<input
+			type="color"
+			value={theme.current.itemHoverBg}
+			oninput={(event) => theme.update({ itemHoverBg: event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"><span>Active background</span></span>
-		<input type="color" bind:value={theme.current.itemActiveBg} />
+		<input
+			type="color"
+			value={theme.current.itemActiveBg}
+			oninput={(event) => theme.update({ itemActiveBg: event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Vertical padding</span><span class="value">{theme.current.itemPaddingY}px</span></span
 		>
-		<input type="range" min="0" max="16" step="1" bind:value={theme.current.itemPaddingY} />
+		<input
+			type="range"
+			min="0"
+			max="16"
+			step="1"
+			value={theme.current.itemPaddingY}
+			oninput={(event) => theme.update({ itemPaddingY: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Horizontal padding</span><span class="value">{theme.current.itemPaddingX}px</span
 			></span
 		>
-		<input type="range" min="0" max="24" step="1" bind:value={theme.current.itemPaddingX} />
+		<input
+			type="range"
+			min="0"
+			max="24"
+			step="1"
+			value={theme.current.itemPaddingX}
+			oninput={(event) => theme.update({ itemPaddingX: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Item gap</span><span class="value">{theme.current.itemGap}px</span></span
 		>
-		<input type="range" min="0" max="12" step="1" bind:value={theme.current.itemGap} />
+		<input
+			type="range"
+			min="0"
+			max="12"
+			step="1"
+			value={theme.current.itemGap}
+			oninput={(event) => theme.update({ itemGap: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Item radius</span><span class="value">{theme.current.itemRadius}px</span></span
 		>
-		<input type="range" min="0" max="16" step="1" bind:value={theme.current.itemRadius} />
+		<input
+			type="range"
+			min="0"
+			max="16"
+			step="1"
+			value={theme.current.itemRadius}
+			oninput={(event) => theme.update({ itemRadius: +event.currentTarget.value })}
+		/>
 	</label>
 
 	<h2>Typography</h2>
 	<label class="field">
 		<span class="field-head"><span>Font family</span></span>
-		<select bind:value={theme.current.fontFamily}>
+		<select
+			value={theme.current.fontFamily}
+			onchange={(event) => theme.update({ fontFamily: event.currentTarget.value })}
+		>
 			{#each FONT_OPTIONS as option (option.value)}
 				<option value={option.value}>{option.label}</option>
 			{/each}
@@ -182,18 +264,36 @@
 		<span class="field-head"
 			><span>Base size</span><span class="value">{theme.current.fontSize}px</span></span
 		>
-		<input type="range" min="11" max="20" step="1" bind:value={theme.current.fontSize} />
+		<input
+			type="range"
+			min="11"
+			max="20"
+			step="1"
+			value={theme.current.fontSize}
+			oninput={(event) => theme.update({ fontSize: +event.currentTarget.value })}
+		/>
 	</label>
 	<label class="field">
 		<span class="field-head"
 			><span>Line height</span><span class="value">{theme.current.lineHeight}</span></span
 		>
-		<input type="range" min="1" max="2" step="0.05" bind:value={theme.current.lineHeight} />
+		<input
+			type="range"
+			min="1"
+			max="2"
+			step="0.05"
+			value={theme.current.lineHeight}
+			oninput={(event) => theme.update({ lineHeight: +event.currentTarget.value })}
+		/>
 	</label>
 
 	<h2>Levels</h2>
 	<label class="field checkbox">
-		<input type="checkbox" bind:checked={theme.current.guides} />
+		<input
+			type="checkbox"
+			checked={theme.current.guides}
+			onchange={(event) => theme.update({ guides: event.currentTarget.checked })}
+		/>
 		<span>Nested-line guides</span>
 	</label>
 
