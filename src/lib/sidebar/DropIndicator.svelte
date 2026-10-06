@@ -5,7 +5,7 @@
 	 * decorative and pointer-transparent so it never interferes with the drag.
 	 */
 
-	import type { DropPosition } from '../tree';
+	import type { DropPosition } from './tree';
 
 	interface Props {
 		/** Where a dragged item would land relative to the host row. */

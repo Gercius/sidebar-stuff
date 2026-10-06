@@ -5,13 +5,12 @@
 	 * children when expanded.
 	 */
 
-	import { MAX_DEPTH, levels } from '../config';
-	import { draggableItem, dropTargetItem } from '../dnd';
-	import { getSidebarStore } from '../store.svelte';
-	import { getThemeStore } from '../theme.svelte';
-	import type { SidebarItem as Item } from '../types';
+	import { MAX_DEPTH, levels } from './config';
+	import { draggableItem, dropTargetItem } from './dnd';
+	import { getSidebarStore } from './store.svelte';
+	import { getThemeStore } from './theme.svelte';
+	import type { SidebarItem as Item } from './types';
 	import DropIndicator from './DropIndicator.svelte';
-	import EditableLabel from './EditableLabel.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 
 	interface Props {
@@ -48,6 +47,7 @@
 	const dropPosition = $derived(store.dndTargetId === item.id ? store.dndTargetPosition : null);
 	/** Whether this row's "⋯" menu is open. */
 	const menuOpen = $derived(store.menuId === item.id);
+	let editFinished = false;
 
 	/** Left padding combines the themed level indent with the base item padding. */
 	const indent = $derived(`calc(var(--sb-level-${depth}-indent, ${level.indent}px) + 8px)`);
@@ -60,7 +60,44 @@
 	}
 
 	function beginEdit(): void {
-		if (!editing) store.beginEdit(item.id);
+		if (editing) return;
+		editFinished = false;
+		store.beginEdit(item.id);
+	}
+
+	function attachEditor(element: HTMLInputElement): void {
+		element.value = item.label;
+		element.focus();
+		element.select();
+	}
+
+	function commitEdit(): void {
+		if (editFinished) return;
+		editFinished = true;
+		store.endEdit(true);
+	}
+
+	function cancelEdit(): void {
+		if (editFinished) return;
+		editFinished = true;
+		store.endEdit(false);
+	}
+
+	function onEditInput(event: Event): void {
+		const next = (event.currentTarget as HTMLInputElement).value;
+		if (next.trim() === '') return;
+		store.update(item.id, { label: next }, { transient: true });
+	}
+
+	function onEditKeydown(event: KeyboardEvent): void {
+		event.stopPropagation();
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			commitEdit();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelEdit();
+		}
 	}
 
 	function onMainKeydown(event: KeyboardEvent): void {
@@ -83,7 +120,17 @@
 		<span class="icon" aria-hidden="true">{item.icon}</span>
 	{/if}
 	{#if editing}
-		<EditableLabel {item} />
+		<input
+			class="editable-label"
+			{@attach attachEditor}
+			oninput={onEditInput}
+			onkeydown={onEditKeydown}
+			onblur={commitEdit}
+			onclick={(event) => event.stopPropagation()}
+			ondblclick={(event) => event.stopPropagation()}
+			onpointerdown={(event) => event.stopPropagation()}
+			aria-label="Item label"
+		/>
 	{:else}
 		<span class="label">{item.label}</span>
 	{/if}
@@ -320,6 +367,20 @@
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
+	}
+
+	.editable-label {
+		flex: 1;
+		min-width: 0;
+		margin: 0;
+		padding: 1px 4px;
+		border: 1px solid var(--ui-accent);
+		border-radius: 4px;
+		background: #fff;
+		color: inherit;
+		font: inherit;
+		line-height: inherit;
+		outline: none;
 	}
 
 	.actions {

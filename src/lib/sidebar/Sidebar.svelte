@@ -6,10 +6,10 @@
 	 * the `vars` prop.
 	 */
 
-	import { levels as configLevels } from '../config';
-	import { dndMonitor } from '../dnd';
-	import { getSidebarStore } from '../store.svelte';
-	import type { SidebarItem as Item } from '../types';
+	import { levels as configLevels } from './config';
+	import { dndMonitor } from './dnd';
+	import { getSidebarStore } from './store.svelte';
+	import type { SidebarItem as Item } from './types';
 	import SidebarItem from './SidebarItem.svelte';
 
 	interface Props {
