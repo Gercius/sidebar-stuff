@@ -1,6 +1,8 @@
-# sv
+# Sidebar Builder
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A minimal, single-page sidebar builder built with SvelteKit and Svelte 5.
+Drag items to reorder or nest them up to four levels, and double-click a label to rename it.
+Changes are held in memory and reset when the page reloads.
 
 ## Creating a project
 

@@ -11,9 +11,7 @@
 		{/each}
 	</ul>
 
-	<button class="add-item" type="button" onclick={() => store.add(null)}>
-		+ Add item
-	</button>
+	<button class="add-item" type="button" onclick={() => store.add(null)}> + Add item </button>
 </nav>
 
 <style>
