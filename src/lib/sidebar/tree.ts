@@ -16,6 +16,12 @@ export interface ItemLocation {
 	depth: number;
 }
 
+/** Result of removing an item without mutating the source tree. */
+export interface RemoveItemResult {
+	tree: SidebarItem[];
+	item: SidebarItem;
+}
+
 /** Generate a unique id for a new item. */
 export function createId(): string {
 	const cryptoObj = globalThis.crypto;
@@ -45,32 +51,54 @@ function findIn(
 	return null;
 }
 
-/** Remove an item (and its subtree) from the tree. Returns the removed item. */
-export function removeItem(tree: SidebarItem[], id: string): SidebarItem | null {
-	const location = findItem(tree, id);
-	if (!location) return null;
-	const siblings = location.parent ? location.parent.children : tree;
-	siblings.splice(location.index, 1);
-	return location.item;
+/** Deep-clone a tree while preserving every item id. */
+export function cloneTree(tree: SidebarItem[]): SidebarItem[] {
+	return tree.map((item) => ({ ...item, children: cloneTree(item.children) }));
 }
 
-/** Insert an item into `parentId`'s children (or the root when `null`) at `index`. */
+/** Remove an item (and its subtree) without mutating the source tree. */
+export function removeItem(tree: SidebarItem[], id: string): RemoveItemResult | null {
+	const next = cloneTree(tree);
+	const location = findItem(next, id);
+	if (!location) return null;
+	const siblings = location.parent ? location.parent.children : next;
+	const [item] = siblings.splice(location.index, 1);
+	return { tree: next, item };
+}
+
+/** Insert an item without mutating the source tree. */
 export function insertItem(
 	tree: SidebarItem[],
 	parentId: string | null,
 	index: number,
 	item: SidebarItem
-): void {
+): SidebarItem[] | null {
+	const next = cloneTree(tree);
 	let siblings: SidebarItem[];
 	if (parentId === null) {
-		siblings = tree;
+		siblings = next;
 	} else {
-		const parent = findItem(tree, parentId);
-		if (!parent) return;
+		const parent = findItem(next, parentId);
+		if (!parent) return null;
 		siblings = parent.item.children;
 	}
 	const at = Math.max(0, Math.min(index, siblings.length));
-	siblings.splice(at, 0, item);
+	siblings.splice(at, 0, cloneTree([item])[0]);
+	return next;
+}
+
+/** Replace one item without mutating the source tree. */
+export function updateItem(
+	tree: SidebarItem[],
+	id: string,
+	update: (item: SidebarItem) => SidebarItem
+): SidebarItem[] | null {
+	const next = cloneTree(tree);
+	const location = findItem(next, id);
+	if (!location) return null;
+
+	Object.assign(location.item, update(location.item));
+	return next;
 }
 
 /** True when `id` is a strict descendant of `ancestorId`. */
@@ -135,39 +163,37 @@ export function canDrop(
 }
 
 /**
- * Move an item next to or inside another item. Returns `false` (leaving the
- * tree untouched) when the move would be invalid.
+ * Move an item next to or inside another item. Returns a new tree, or `null`
+ * when the move would be invalid.
  */
 export function moveItem(
 	tree: SidebarItem[],
 	id: string,
 	target: string | null,
 	position: DropPosition
-): boolean {
-	if (!canDrop(tree, id, target, position)) return false;
-	const item = removeItem(tree, id);
-	if (!item) return false;
+): SidebarItem[] | null {
+	if (!canDrop(tree, id, target, position)) return null;
+	const removed = removeItem(tree, id);
+	if (!removed) return null;
+	const { item } = removed;
+	const next = removed.tree;
 
 	let parentId: string | null = null;
 	let index: number;
 
 	if (position === 'inside') {
 		parentId = target;
-		index = target === null ? tree.length : (findItem(tree, target)?.item.children.length ?? 0);
+		index = target === null ? next.length : (findItem(next, target)?.item.children.length ?? 0);
 	} else if (target === null) {
-		index = position === 'before' ? 0 : tree.length;
+		index = position === 'before' ? 0 : next.length;
 	} else {
-		const located = findItem(tree, target);
-		if (!located) {
-			tree.push(item);
-			return false;
-		}
+		const located = findItem(next, target);
+		if (!located) return null;
 		parentId = located.parent ? located.parent.id : null;
 		index = position === 'before' ? located.index : located.index + 1;
 	}
 
-	insertItem(tree, parentId, index, item);
-	return true;
+	return insertItem(next, parentId, index, item);
 }
 
 /** Deep-clone an item and every descendant, assigning fresh ids. */

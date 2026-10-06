@@ -17,6 +17,7 @@ import {
 	type Theme,
 	type ThemeStore
 } from './theme.svelte';
+import { cloneTree } from './tree';
 import type { SidebarItem } from './types';
 
 /** `localStorage` key holding the saved document. */
@@ -291,7 +292,7 @@ export function applyDocument(
 	options: { recordHistory?: boolean } = {}
 ): void {
 	if (options.recordHistory !== false) store.recordExternalChange();
-	store.tree = document.tree;
+	store.tree = cloneTree(document.tree);
 	store.select(null);
 	theme.current = document.theme;
 	theme.setActiveItem(null);

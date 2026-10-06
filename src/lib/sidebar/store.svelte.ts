@@ -14,12 +14,14 @@ import { cloneTheme, type Theme, type ThemeStore } from './theme.svelte';
 import {
 	canDrop,
 	cloneWithNewIds,
+	cloneTree,
 	createId,
 	findItem,
 	insertItem,
 	moveItem,
 	removeItem,
 	subtreeHeight,
+	updateItem,
 	type DropPosition
 } from './tree';
 import type { SidebarItem } from './types';
@@ -50,7 +52,7 @@ function treeEquals(a: SidebarItem[], b: SidebarItem[]): boolean {
 }
 
 export class SidebarStore {
-	/** The sidebar tree. Mutated in place by the pure tree helpers. */
+	/** The sidebar tree. Every document action replaces it with a fresh tree. */
 	tree = $state<SidebarItem[]>(createSampleTree());
 	/** Id of the currently selected item, or `null`. */
 	selectedId = $state<string | null>(null);
@@ -134,8 +136,10 @@ export class SidebarStore {
 	/** Append a new top-level item, select it and start editing its label. */
 	add(label = DEFAULT_LABEL): SidebarItem {
 		const item = this.#createItem(label);
+		const next = insertItem(this.tree, null, this.tree.length, item);
+		if (!next) throw new Error('Unable to add a top-level sidebar item.');
 		this.#commit();
-		this.tree.push(item);
+		this.tree = next;
 		this.beginEdit(item.id);
 		return item;
 	}
@@ -151,9 +155,14 @@ export class SidebarStore {
 		if (location.depth >= MAX_DEPTH) return null;
 
 		const item = this.#createItem(label);
+		const next = updateItem(this.tree, parentId, (parent) => ({
+			...parent,
+			collapsed: false,
+			children: [...parent.children, item]
+		}));
+		if (!next) return null;
 		this.#commit();
-		location.item.children.push(item);
-		location.item.collapsed = false;
+		this.tree = next;
 		this.beginEdit(item.id);
 		return item;
 	}
@@ -167,19 +176,27 @@ export class SidebarStore {
 		if (!location) return null;
 
 		const item = this.#createItem(label);
+		const next = insertItem(
+			this.tree,
+			location.parent ? location.parent.id : null,
+			location.index + 1,
+			item
+		);
+		if (!next) return null;
 		this.#commit();
-		insertItem(this.tree, location.parent ? location.parent.id : null, location.index + 1, item);
+		this.tree = next;
 		this.beginEdit(item.id);
 		return item;
 	}
 
 	/** Remove `id` and its subtree. Returns the removed item, or `null`. */
 	remove(id: string): SidebarItem | null {
-		if (!findItem(this.tree, id)) return null;
+		const result = removeItem(this.tree, id);
+		if (!result) return null;
 		this.#commit();
-		const removed = removeItem(this.tree, id);
+		this.tree = result.tree;
 		this.#reconcile();
-		return removed;
+		return result.item;
 	}
 
 	/**
@@ -192,25 +209,34 @@ export class SidebarStore {
 		if (location.depth - 1 + subtreeHeight(location.item) > MAX_DEPTH) return null;
 
 		const copy = cloneWithNewIds(location.item);
+		const next = insertItem(
+			this.tree,
+			location.parent ? location.parent.id : null,
+			location.index + 1,
+			copy
+		);
+		if (!next) return null;
 		this.#commit();
-		insertItem(this.tree, location.parent ? location.parent.id : null, location.index + 1, copy);
+		this.tree = next;
 		this.select(copy.id);
 		return copy;
 	}
 
 	/** Move `id` before/after/inside `target`. Returns `false` on an invalid move. */
 	move(id: string, target: string | null, position: DropPosition): boolean {
-		if (!canDrop(this.tree, id, target, position)) return false;
+		const next = moveItem(this.tree, id, target, position);
+		if (!next) return false;
 		this.#commit();
-		return moveItem(this.tree, id, target, position);
+		this.tree = next;
+		return true;
 	}
 
 	/** Apply a shallow patch to `id`'s item. */
 	update(id: string, patch: SidebarItemPatch, options: UpdateOptions = {}): boolean {
-		const location = findItem(this.tree, id);
-		if (!location) return false;
+		const next = updateItem(this.tree, id, (item) => ({ ...item, ...patch }));
+		if (!next) return false;
 		if (!options.transient) this.#commit();
-		Object.assign(location.item, patch);
+		this.tree = next;
 		return true;
 	}
 
@@ -218,8 +244,10 @@ export class SidebarStore {
 	toggleCollapse(id: string): boolean {
 		const location = findItem(this.tree, id);
 		if (!location || location.item.children.length === 0) return false;
+		const next = updateItem(this.tree, id, (item) => ({ ...item, collapsed: !item.collapsed }));
+		if (!next) return false;
 		this.#commit();
-		location.item.collapsed = !location.item.collapsed;
+		this.tree = next;
 		return true;
 	}
 
@@ -346,13 +374,13 @@ export class SidebarStore {
 
 	#snapshot(): DocumentSnapshot {
 		return {
-			tree: $state.snapshot(this.tree) as SidebarItem[],
+			tree: cloneTree($state.snapshot(this.tree) as SidebarItem[]),
 			theme: this.#themeStore ? cloneTheme(this.#themeStore.current) : null
 		};
 	}
 
 	#restore(snapshot: DocumentSnapshot): void {
-		this.tree = snapshot.tree;
+		this.tree = cloneTree(snapshot.tree);
 		if (snapshot.theme && this.#themeStore) this.#themeStore.current = cloneTheme(snapshot.theme);
 	}
 

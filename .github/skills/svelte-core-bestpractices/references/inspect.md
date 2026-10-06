@@ -48,6 +48,7 @@ On updates, a stack trace will be printed, making it easy to find the origin of 
 
 This rune, added in 5.14, causes the surrounding function to be _traced_ in development. Any time the function re-runs as part of an [effect](https://svelte.dev/docs/svelte/$effect/llms.txt) or a [derived](https://svelte.dev/docs/svelte/$derived/llms.txt), information will be printed to the console about which pieces of reactive state caused the effect to fire.
 
+<!-- prettier-ignore -->
 ```svelte
 <script>
 	import { doSomeWork } from './elsewhere';

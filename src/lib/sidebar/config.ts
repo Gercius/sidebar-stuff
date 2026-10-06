@@ -8,7 +8,9 @@ export const levels: LevelConfig[] = [
 	{ indent: 0, fontSize: 15, fontWeight: 600, canHaveChildren: true },
 	{ indent: 16, fontSize: 14, fontWeight: 500, canHaveChildren: true },
 	{ indent: 32, fontSize: 13, fontWeight: 400, canHaveChildren: true },
-	{ indent: 48, fontSize: 12, fontWeight: 400, canHaveChildren: false }
+	// Keep the final entry extensible: MAX_DEPTH prevents children here until a
+	// deeper level is added to this array.
+	{ indent: 48, fontSize: 12, fontWeight: 400, canHaveChildren: true }
 ];
 
 /** Maximum nesting depth, derived from {@link levels}. */

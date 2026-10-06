@@ -1,3 +1,4 @@
+import process from 'node:process';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -13,7 +14,10 @@ export default defineConfig({
 
 			// The builder is fully client-side, so the whole app is prerendered to static files.
 			// See https://svelte.dev/docs/kit/adapter-static for more information about the adapter.
-			adapter: adapter()
+			adapter: adapter({ fallback: '404.html' }),
+			paths: {
+				base: process.env.BASE_PATH ?? ''
+			}
 		})
 	]
 });
