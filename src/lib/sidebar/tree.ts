@@ -1,16 +1,14 @@
-import { MAX_DEPTH, levels } from './config';
 import type { SidebarItem } from './types';
+
+export const MAX_DEPTH = 4;
 
 /** Where an item is dropped relative to its target. */
 export type DropPosition = 'before' | 'after' | 'inside';
 
 /** Result of locating an item inside a tree. */
 export interface ItemLocation {
-	/** The matched item. */
 	item: SidebarItem;
-	/** Owning item, or `null` when the item sits at the top level. */
 	parent: SidebarItem | null;
-	/** Index within the parent's children (or the root array). */
 	index: number;
 	/** 1-based depth. Top-level items are at depth 1. */
 	depth: number;
@@ -29,6 +27,22 @@ export function createId(): string {
 		return cryptoObj.randomUUID();
 	}
 	return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Create the small example tree shown in the rewrite plan. */
+export function createSampleTree(): SidebarItem[] {
+	const item = (label: string, children: SidebarItem[] = []): SidebarItem => ({
+		id: createId(),
+		label,
+		children
+	});
+
+	return [
+		item('Link'),
+		item('Link', [item('Sublink'), item('Sublink')]),
+		item('Link'),
+		item('Link')
+	];
 }
 
 /** Find an item anywhere in the tree, with its parent, index and depth. */
@@ -51,19 +65,32 @@ function findIn(
 	return null;
 }
 
-/** Deep-clone a tree while preserving every item id. */
-export function cloneTree(tree: SidebarItem[]): SidebarItem[] {
-	return tree.map((item) => ({ ...item, children: cloneTree(item.children) }));
-}
-
 /** Remove an item (and its subtree) without mutating the source tree. */
 export function removeItem(tree: SidebarItem[], id: string): RemoveItemResult | null {
-	const next = cloneTree(tree);
-	const location = findItem(next, id);
-	if (!location) return null;
-	const siblings = location.parent ? location.parent.children : next;
-	const [item] = siblings.splice(location.index, 1);
-	return { tree: next, item };
+	const result = removeFrom(tree, id);
+	return result ? { tree: result.items, item: result.item } : null;
+}
+
+function removeFrom(
+	items: SidebarItem[],
+	id: string
+): { items: SidebarItem[]; item: SidebarItem } | null {
+	for (let index = 0; index < items.length; index++) {
+		const current = items[index];
+		if (current.id === id) {
+			const next = items.slice();
+			const [item] = next.splice(index, 1);
+			return { items: next, item };
+		}
+
+		const nested = removeFrom(current.children, id);
+		if (nested) {
+			const next = items.slice();
+			next[index] = { ...current, children: nested.items };
+			return { items: next, item: nested.item };
+		}
+	}
+	return null;
 }
 
 /** Insert an item without mutating the source tree. */
@@ -73,32 +100,42 @@ export function insertItem(
 	index: number,
 	item: SidebarItem
 ): SidebarItem[] | null {
-	const next = cloneTree(tree);
-	let siblings: SidebarItem[];
-	if (parentId === null) {
-		siblings = next;
-	} else {
-		const parent = findItem(next, parentId);
-		if (!parent) return null;
-		siblings = parent.item.children;
-	}
-	const at = Math.max(0, Math.min(index, siblings.length));
-	siblings.splice(at, 0, cloneTree([item])[0]);
+	if (parentId === null) return insertAt(tree, index, item);
+	return insertInto(tree, parentId, index, item);
+}
+
+function insertAt(items: SidebarItem[], index: number, item: SidebarItem): SidebarItem[] {
+	const next = items.slice();
+	const at = Math.max(0, Math.min(index, next.length));
+	next.splice(at, 0, item);
 	return next;
 }
 
-/** Replace one item without mutating the source tree. */
-export function updateItem(
-	tree: SidebarItem[],
-	id: string,
-	update: (item: SidebarItem) => SidebarItem
+function insertInto(
+	items: SidebarItem[],
+	parentId: string,
+	index: number,
+	item: SidebarItem
 ): SidebarItem[] | null {
-	const next = cloneTree(tree);
-	const location = findItem(next, id);
-	if (!location) return null;
+	for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+		const current = items[itemIndex];
+		if (current.id === parentId) {
+			const next = items.slice();
+			next[itemIndex] = {
+				...current,
+				children: insertAt(current.children, index, item)
+			};
+			return next;
+		}
 
-	Object.assign(location.item, update(location.item));
-	return next;
+		const children = insertInto(current.children, parentId, index, item);
+		if (children) {
+			const next = items.slice();
+			next[itemIndex] = { ...current, children };
+			return next;
+		}
+	}
+	return null;
 }
 
 /** True when `id` is a strict descendant of `ancestorId`. */
@@ -126,53 +163,13 @@ export function subtreeHeight(item: SidebarItem): number {
 	return max + 1;
 }
 
-/**
- * Whether `sourceId` can be dropped relative to `targetId` without producing an
- * invalid tree: no self/descendant drops, no drops past `MAX_DEPTH`, and no
- * children on levels that forbid them.
- */
-export function canDrop(
-	tree: SidebarItem[],
-	sourceId: string,
-	targetId: string | null,
-	position: DropPosition
-): boolean {
-	const source = findItem(tree, sourceId);
-	if (!source) return false;
-
-	// Never drop an item into itself or into its own subtree.
-	if (targetId !== null && (targetId === sourceId || isDescendant(tree, sourceId, targetId))) {
-		return false;
-	}
-
-	const height = subtreeHeight(source.item);
-
-	if (position === 'inside') {
-		// Dropping into the root makes the subtree top-level.
-		if (targetId === null) return height <= MAX_DEPTH;
-		const target = findItem(tree, targetId);
-		if (!target) return false;
-		if (!levels[target.depth - 1]?.canHaveChildren) return false;
-		return target.depth + height <= MAX_DEPTH;
-	}
-
-	// before / after keep the target's depth.
-	const targetDepth = targetId === null ? 1 : findItem(tree, targetId)?.depth;
-	if (targetDepth === undefined) return false;
-	return targetDepth + height - 1 <= MAX_DEPTH;
-}
-
-/**
- * Move an item next to or inside another item. Returns a new tree, or `null`
- * when the move would be invalid.
- */
+/** Move an item next to or inside another item without mutating the source tree. */
 export function moveItem(
 	tree: SidebarItem[],
 	id: string,
 	target: string | null,
 	position: DropPosition
 ): SidebarItem[] | null {
-	if (!canDrop(tree, id, target, position)) return null;
 	const removed = removeItem(tree, id);
 	if (!removed) return null;
 	const { item } = removed;
@@ -194,13 +191,4 @@ export function moveItem(
 	}
 
 	return insertItem(next, parentId, index, item);
-}
-
-/** Deep-clone an item and every descendant, assigning fresh ids. */
-export function cloneWithNewIds(item: SidebarItem): SidebarItem {
-	return {
-		...item,
-		id: createId(),
-		children: item.children.map(cloneWithNewIds)
-	};
 }

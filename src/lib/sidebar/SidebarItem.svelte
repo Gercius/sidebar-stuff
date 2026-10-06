@@ -116,9 +116,6 @@
 </script>
 
 {#snippet rowContent()}
-	{#if item.icon}
-		<span class="icon" aria-hidden="true">{item.icon}</span>
-	{/if}
 	{#if editing}
 		<input
 			class="editable-label"
@@ -355,11 +352,6 @@
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
-	}
-
-	.icon {
-		flex: 0 0 auto;
-		line-height: 1;
 	}
 
 	.label {
