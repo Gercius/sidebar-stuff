@@ -27,8 +27,8 @@
 	.combine {
 		position: absolute;
 		inset: 0;
-		border: 2px solid var(--ui-accent);
-		border-radius: var(--sb-item-radius);
+		border: 2px solid #4c7cf3;
+		border-radius: 4px;
 		pointer-events: none;
 	}
 
@@ -37,7 +37,7 @@
 		right: 8px;
 		height: 2px;
 		border-radius: 2px;
-		background: var(--ui-accent);
+		background: #4c7cf3;
 		pointer-events: none;
 	}
 

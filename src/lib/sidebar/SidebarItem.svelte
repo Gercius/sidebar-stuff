@@ -1,71 +1,38 @@
 <script lang="ts">
-	/**
-	 * Recursive sidebar row. Renders one item, its per-level typography, the
-	 * builder-only selection highlight and hover affordances, then recurses into
-	 * children when expanded.
-	 */
-
-	import { MAX_DEPTH, levels } from './config';
+	import { MAX_DEPTH } from './tree';
 	import { draggableItem, dropTargetItem } from './dnd';
-	import { getSidebarStore } from './store.svelte';
-	import { getThemeStore } from './theme.svelte';
+	import { store } from './store.svelte';
 	import type { SidebarItem as Item } from './types';
 	import DropIndicator from './DropIndicator.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 
 	interface Props {
-		/** The item to render. */
 		item: Item;
-		/** Zero-based nesting depth, used to look up `levels[depth]`. */
 		depth: number;
-		/** Invoked when the "⋯" affordance is activated. */
-		onMenu?: (item: Item) => void;
 	}
 
-	let { item, depth, onMenu }: Props = $props();
+	let { item, depth }: Props = $props();
 
-	const store = getSidebarStore();
-	const theme = getThemeStore();
-
-	/** Per-level presentation for this depth, used as the CSS-var fallback. */
-	const level = $derived(levels[depth] ?? levels[levels.length - 1]);
 	const hasChildren = $derived(item.children.length > 0);
 	const collapsed = $derived(item.collapsed ?? false);
-	const selected = $derived(store.selectedId === item.id);
-	/** Whether this row is the theme's active-state demo item. */
-	const active = $derived(theme.activeItemId === item.id);
-	/** Whether nested-line guides are enabled in the theme. */
-	const guides = $derived(theme.current.guides);
-	/** Children are only allowed where the level permits and depth stays in range. */
-	const canAddChild = $derived(levels[depth]?.canHaveChildren === true && depth + 1 < MAX_DEPTH);
-
-	/** Whether this row currently hosts the inline label editor. */
 	const editing = $derived(store.editingId === item.id);
-	/** Whether this row is the item currently being dragged. */
 	const dragging = $derived(store.dndSourceId === item.id);
-	/** Drop position feedback for this row, or `null` when it is not the target. */
 	const dropPosition = $derived(store.dndTargetId === item.id ? store.dndTargetPosition : null);
-	/** Whether this row's "⋯" menu is open. */
-	const menuOpen = $derived(store.menuId === item.id);
+	const canAddChild = $derived(depth + 1 < MAX_DEPTH);
+
+	let draft = $state('');
+	let originalLabel = $state('');
 	let editFinished = false;
-
-	/** Left padding combines the themed level indent with the base item padding. */
-	const indent = $derived(`calc(var(--sb-level-${depth}-indent, ${level.indent}px) + 8px)`);
-
-	/** First click selects; clicking an already-selected item starts inline editing. */
-	function activate(): void {
-		if (editing) return;
-		if (selected) store.beginEdit(item.id);
-		else store.select(item.id);
-	}
 
 	function beginEdit(): void {
 		if (editing) return;
-		editFinished = false;
-		store.beginEdit(item.id);
+		store.editingId = item.id;
 	}
 
 	function attachEditor(element: HTMLInputElement): void {
+		draft = item.label;
+		originalLabel = item.label;
+		editFinished = false;
 		element.value = item.label;
 		element.focus();
 		element.select();
@@ -74,19 +41,13 @@
 	function commitEdit(): void {
 		if (editFinished) return;
 		editFinished = true;
-		store.endEdit(true);
+		store.rename(item.id, draft.trim() ? draft : originalLabel);
 	}
 
 	function cancelEdit(): void {
 		if (editFinished) return;
 		editFinished = true;
-		store.endEdit(false);
-	}
-
-	function onEditInput(event: Event): void {
-		const next = (event.currentTarget as HTMLInputElement).value;
-		if (next.trim() === '') return;
-		store.update(item.id, { label: next }, { transient: true });
+		store.editingId = null;
 	}
 
 	function onEditKeydown(event: KeyboardEvent): void {
@@ -100,47 +61,23 @@
 		}
 	}
 
-	function onMainKeydown(event: KeyboardEvent): void {
+	function onLabelKeydown(event: KeyboardEvent): void {
 		if (event.key !== 'Enter' && event.key !== ' ') return;
 		event.preventDefault();
-		// The page-level shortcut handler must not also react to this Enter.
-		event.stopPropagation();
-		activate();
+		beginEdit();
 	}
 
-	/** Run a fallback move from the "⋯" menu, then close the menu. */
-	function runMove(action: () => boolean): void {
-		action();
-		store.openMenu(null);
+	function deleteItem(): void {
+		if (hasChildren && !window.confirm(`Delete “${item.label}” and its children?`)) return;
+		store.remove(item.id);
 	}
 </script>
-
-{#snippet rowContent()}
-	{#if editing}
-		<input
-			class="editable-label"
-			{@attach attachEditor}
-			oninput={onEditInput}
-			onkeydown={onEditKeydown}
-			onblur={commitEdit}
-			onclick={(event) => event.stopPropagation()}
-			ondblclick={(event) => event.stopPropagation()}
-			onpointerdown={(event) => event.stopPropagation()}
-			aria-label="Item label"
-		/>
-	{:else}
-		<span class="label">{item.label}</span>
-	{/if}
-{/snippet}
 
 <li class="item">
 	<div
 		class="row"
-		class:selected
-		class:active
 		class:dragging
-		style:padding-left={indent}
-		style:color={`var(--sb-level-${depth}-color, inherit)`}
+		style:padding-left={`${depth * 16}px`}
 		{@attach draggableItem(item.id, () => item.label)}
 		{@attach dropTargetItem(item.id, depth)}
 	>
@@ -148,7 +85,8 @@
 			<button
 				class="chevron"
 				class:open={!collapsed}
-				onclick={() => store.toggleCollapse(item.id)}
+				type="button"
+				onclick={() => store.toggle(item.id)}
 				aria-label={collapsed ? `Expand ${item.label}` : `Collapse ${item.label}`}
 				aria-expanded={!collapsed}
 			>
@@ -168,33 +106,34 @@
 		{/if}
 
 		{#if editing}
-			<div
-				class="main"
-				style:font-size={`var(--sb-level-${depth}-font-size, ${level.fontSize}px)`}
-				style:font-weight={`var(--sb-level-${depth}-font-weight, ${level.fontWeight})`}
-			>
-				{@render rowContent()}
-			</div>
+			<input
+				class="label-input"
+				{@attach attachEditor}
+				value={draft}
+				oninput={(event) => (draft = event.currentTarget.value)}
+				onkeydown={onEditKeydown}
+				onblur={commitEdit}
+				aria-label="Item label"
+			/>
 		{:else}
 			<button
-				class="main"
-				onclick={activate}
+				class="label"
+				type="button"
 				ondblclick={beginEdit}
-				onkeydown={onMainKeydown}
-				aria-current={selected ? 'true' : undefined}
-				style:font-size={`var(--sb-level-${depth}-font-size, ${level.fontSize}px)`}
-				style:font-weight={`var(--sb-level-${depth}-font-weight, ${level.fontWeight})`}
+				onkeydown={onLabelKeydown}
+				aria-label={`Rename ${item.label}`}
 			>
-				{@render rowContent()}
+				{item.label}
 			</button>
 		{/if}
 
 		<span class="actions">
-			<span class="drag-handle" data-drag-handle aria-hidden="true" title="Drag to reorder">⠿</span>
+			<span class="drag-handle" data-drag-handle aria-hidden="true" title="Drag to move">⠿</span>
 			{#if canAddChild}
 				<button
 					class="action"
-					onclick={() => store.addChild(item.id)}
+					type="button"
+					onclick={() => store.add(item.id)}
 					aria-label={`Add child to ${item.label}`}
 					title="Add child"
 				>
@@ -203,71 +142,24 @@
 			{/if}
 			<button
 				class="action"
-				onclick={(event) => {
-					event.stopPropagation();
-					store.select(item.id);
-					store.openMenu(menuOpen ? null : item.id);
-					onMenu?.(item);
-				}}
-				aria-label={`More actions for ${item.label}`}
-				title="More actions"
+				type="button"
+				onclick={deleteItem}
+				aria-label={`Delete ${item.label}`}
+				title="Delete item"
 			>
-				⋯
+				×
 			</button>
 		</span>
 
 		{#if dropPosition}
-			<DropIndicator position={dropPosition} indent={level.indent + 8} />
-		{/if}
-
-		{#if menuOpen}
-			<button
-				type="button"
-				class="menu-backdrop"
-				aria-label="Close menu"
-				onclick={() => store.openMenu(null)}
-			></button>
-			<div class="item-menu" role="menu">
-				<button
-					type="button"
-					role="menuitem"
-					disabled={!store.canMoveUp(item.id)}
-					onclick={() => runMove(() => store.moveUp(item.id))}
-				>
-					Move up
-				</button>
-				<button
-					type="button"
-					role="menuitem"
-					disabled={!store.canMoveDown(item.id)}
-					onclick={() => runMove(() => store.moveDown(item.id))}
-				>
-					Move down
-				</button>
-				<button
-					type="button"
-					role="menuitem"
-					disabled={!store.canIndent(item.id)}
-					onclick={() => runMove(() => store.indent(item.id))}
-				>
-					Indent
-				</button>
-				<button
-					type="button"
-					role="menuitem"
-					disabled={!store.canOutdent(item.id)}
-					onclick={() => runMove(() => store.outdent(item.id))}
-				>
-					Outdent
-				</button>
-			</div>
+			<DropIndicator position={dropPosition} indent={depth * 16} />
 		{/if}
 	</div>
 
 	{#if hasChildren && !collapsed}
-		<ul class="children" class:guides>
+		<ul class="children">
 			{#each item.children as child (child.id)}
-				<SidebarItem item={child} depth={depth + 1} {onMenu} />
+				<SidebarItem item={child} depth={depth + 1} />
 			{/each}
 		</ul>
 	{/if}
@@ -283,29 +175,17 @@
 		display: flex;
 		align-items: center;
 		gap: 2px;
-		padding: var(--sb-item-padding);
-		border-radius: var(--sb-item-radius);
-		color: var(--sb-item-color);
+		min-height: 30px;
+		padding: 4px 6px 4px 0;
+		border-radius: 4px;
 	}
 
 	.row:hover {
-		background: var(--sb-item-hover-bg);
-	}
-
-	/* Active-state demo driven by the theme panel (separate from selection). */
-	.row.active {
-		background: var(--sb-item-active-bg);
-	}
-
-	/* Selection is builder chrome, deliberately independent of the sidebar theme. */
-	.row.selected {
-		background: var(--sb-item-active-bg);
-		outline: 2px solid var(--ui-accent);
-		outline-offset: -2px;
+		background: #f1f3f7;
 	}
 
 	.row.dragging {
-		opacity: 0.5;
+		opacity: 0.45;
 	}
 
 	.chevron,
@@ -319,10 +199,10 @@
 		display: grid;
 		place-items: center;
 		padding: 0;
-		border: none;
+		border: 0;
 		border-radius: 4px;
 		background: transparent;
-		color: var(--ui-text-muted);
+		color: inherit;
 		cursor: pointer;
 	}
 
@@ -334,44 +214,29 @@
 		transform: rotate(90deg);
 	}
 
-	.chevron:hover {
-		background: rgb(0 0 0 / 0.06);
-		color: var(--ui-text);
-	}
-
-	.main {
-		display: flex;
+	.label,
+	.label-input {
 		flex: 1;
-		align-items: center;
-		gap: 8px;
 		min-width: 0;
-		padding: 0;
-		border: none;
+		padding: 2px 4px;
+		border: 0;
+		border-radius: 3px;
 		background: transparent;
 		color: inherit;
 		font: inherit;
 		text-align: left;
-		cursor: pointer;
 	}
 
 	.label {
-		flex: 1;
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
+		cursor: default;
 	}
 
-	.editable-label {
-		flex: 1;
-		min-width: 0;
-		margin: 0;
-		padding: 1px 4px;
-		border: 1px solid var(--ui-accent);
-		border-radius: 4px;
+	.label-input {
+		border: 1px solid #4c7cf3;
 		background: #fff;
-		color: inherit;
-		font: inherit;
-		line-height: inherit;
 		outline: none;
 	}
 
@@ -385,8 +250,7 @@
 	}
 
 	.row:hover .actions,
-	.row:focus-within .actions,
-	.row.selected .actions {
+	.row:focus-within .actions {
 		opacity: 1;
 	}
 
@@ -395,7 +259,7 @@
 		place-items: center;
 		width: 16px;
 		height: 20px;
-		color: var(--ui-text-muted);
+		color: #687385;
 		user-select: none;
 		cursor: grab;
 	}
@@ -410,76 +274,27 @@
 		width: 20px;
 		height: 20px;
 		padding: 0;
-		border: none;
+		border: 0;
 		border-radius: 4px;
 		background: transparent;
-		color: var(--ui-text-muted);
+		color: #687385;
+		font: inherit;
 		line-height: 1;
 		cursor: pointer;
 	}
 
-	.action:hover {
+	.action:hover,
+	.chevron:hover {
 		background: rgb(0 0 0 / 0.06);
-		color: var(--ui-text);
+		color: #1f2530;
 	}
 
 	.children {
 		display: flex;
 		flex-direction: column;
-		gap: var(--sb-item-gap);
+		gap: 2px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
-	}
-
-	/* Optional nested-line guide, toggled from the theme panel. */
-	.children.guides {
-		margin-left: 18px;
-		border-left: 1px solid var(--sb-guide-color, transparent);
-	}
-
-	.menu-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 40;
-		padding: 0;
-		border: none;
-		background: transparent;
-		cursor: default;
-	}
-
-	.item-menu {
-		position: absolute;
-		top: calc(100% + 2px);
-		right: 0;
-		z-index: 41;
-		display: flex;
-		flex-direction: column;
-		min-width: 132px;
-		padding: 4px;
-		border: 1px solid var(--ui-border);
-		border-radius: var(--ui-radius);
-		background: var(--ui-panel-bg);
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
-	}
-
-	.item-menu button {
-		padding: 6px 8px;
-		border: none;
-		border-radius: 4px;
-		background: transparent;
-		color: var(--ui-text);
-		font-size: 12px;
-		text-align: left;
-		cursor: pointer;
-	}
-
-	.item-menu button:hover:not(:disabled) {
-		background: var(--sb-item-hover-bg);
-	}
-
-	.item-menu button:disabled {
-		opacity: 0.45;
-		cursor: not-allowed;
 	}
 </style>
