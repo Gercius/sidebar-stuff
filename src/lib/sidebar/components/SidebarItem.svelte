@@ -8,6 +8,7 @@
 	import { MAX_DEPTH, levels } from '../config';
 	import { draggableItem, dropTargetItem } from '../dnd';
 	import { getSidebarStore } from '../store.svelte';
+	import { getThemeStore } from '../theme.svelte';
 	import type { SidebarItem as Item } from '../types';
 	import DropIndicator from './DropIndicator.svelte';
 	import EditableLabel from './EditableLabel.svelte';
@@ -25,12 +26,17 @@
 	let { item, depth, onMenu }: Props = $props();
 
 	const store = getSidebarStore();
+	const theme = getThemeStore();
 
-	/** Per-level presentation for this depth. */
+	/** Per-level presentation for this depth, used as the CSS-var fallback. */
 	const level = $derived(levels[depth] ?? levels[levels.length - 1]);
 	const hasChildren = $derived(item.children.length > 0);
 	const collapsed = $derived(item.collapsed ?? false);
 	const selected = $derived(store.selectedId === item.id);
+	/** Whether this row is the theme's active-state demo item. */
+	const active = $derived(theme.activeItemId === item.id);
+	/** Whether nested-line guides are enabled in the theme. */
+	const guides = $derived(theme.current.guides);
 	/** Children are only allowed where the level permits and depth stays in range. */
 	const canAddChild = $derived(levels[depth]?.canHaveChildren === true && depth + 1 < MAX_DEPTH);
 
@@ -43,8 +49,8 @@
 	/** Whether this row's "⋯" menu is open. */
 	const menuOpen = $derived(store.menuId === item.id);
 
-	/** Left padding combines the level indent with the base item padding. */
-	const indent = $derived(`${level.indent + 8}px`);
+	/** Left padding combines the themed level indent with the base item padding. */
+	const indent = $derived(`calc(var(--sb-level-${depth}-indent, ${level.indent}px) + 8px)`);
 
 	/** First click selects; clicking an already-selected item starts inline editing. */
 	function activate(): void {
@@ -87,8 +93,10 @@
 	<div
 		class="row"
 		class:selected
+		class:active
 		class:dragging
 		style:padding-left={indent}
+		style:color={`var(--sb-level-${depth}-color, inherit)`}
 		{@attach draggableItem(item.id, () => item.label)}
 		{@attach dropTargetItem(item.id, depth)}
 	>
@@ -118,8 +126,8 @@
 		{#if editing}
 			<div
 				class="main"
-				style:font-size={`${level.fontSize}px`}
-				style:font-weight={level.fontWeight}
+				style:font-size={`var(--sb-level-${depth}-font-size, ${level.fontSize}px)`}
+				style:font-weight={`var(--sb-level-${depth}-font-weight, ${level.fontWeight})`}
 			>
 				{@render rowContent()}
 			</div>
@@ -130,8 +138,8 @@
 				ondblclick={beginEdit}
 				onkeydown={onMainKeydown}
 				aria-current={selected ? 'true' : undefined}
-				style:font-size={`${level.fontSize}px`}
-				style:font-weight={level.fontWeight}
+				style:font-size={`var(--sb-level-${depth}-font-size, ${level.fontSize}px)`}
+				style:font-weight={`var(--sb-level-${depth}-font-weight, ${level.fontWeight})`}
 			>
 				{@render rowContent()}
 			</button>
@@ -213,7 +221,7 @@
 	</div>
 
 	{#if hasChildren && !collapsed}
-		<ul class="children">
+		<ul class="children" class:guides>
 			{#each item.children as child (child.id)}
 				<SidebarItem item={child} depth={depth + 1} {onMenu} />
 			{/each}
@@ -238,6 +246,11 @@
 
 	.row:hover {
 		background: var(--sb-item-hover-bg);
+	}
+
+	/* Active-state demo driven by the theme panel (separate from selection). */
+	.row.active {
+		background: var(--sb-item-active-bg);
 	}
 
 	/* Selection is builder chrome, deliberately independent of the sidebar theme. */
@@ -364,6 +377,12 @@
 		margin: 0;
 		padding: 0;
 		list-style: none;
+	}
+
+	/* Optional nested-line guide, toggled from the theme panel. */
+	.children.guides {
+		margin-left: 18px;
+		border-left: 1px solid var(--sb-guide-color, transparent);
 	}
 
 	.menu-backdrop {

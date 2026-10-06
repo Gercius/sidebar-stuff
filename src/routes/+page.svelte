@@ -7,12 +7,18 @@
 	 */
 
 	import Inspector from '../lib/builder/Inspector.svelte';
+	import ThemePanel from '../lib/builder/ThemePanel.svelte';
 	import Toolbar from '../lib/builder/Toolbar.svelte';
 	import Sidebar from '../lib/sidebar/components/Sidebar.svelte';
 	import { getSidebarStore } from '../lib/sidebar/store.svelte';
+	import { getThemeStore } from '../lib/sidebar/theme.svelte';
 	import { findItem } from '../lib/sidebar/tree';
 
 	const store = getSidebarStore();
+	const theme = getThemeStore();
+
+	/** Which right-hand panel is visible. */
+	let panel = $state<'inspector' | 'theme'>('inspector');
 
 	/** True when the event originates from a text field or editable element. */
 	function isTyping(event: KeyboardEvent): boolean {
@@ -76,10 +82,34 @@
 	<Toolbar />
 	<div class="body">
 		<main class="canvas">
-			<Sidebar />
+			<Sidebar vars={theme.vars} />
 		</main>
 		<div class="panels">
-			<Inspector />
+			<div class="panel-tabs" role="tablist">
+				<button
+					type="button"
+					role="tab"
+					aria-selected={panel === 'inspector'}
+					class:active={panel === 'inspector'}
+					onclick={() => (panel = 'inspector')}
+				>
+					Item
+				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={panel === 'theme'}
+					class:active={panel === 'theme'}
+					onclick={() => (panel = 'theme')}
+				>
+					Theme
+				</button>
+			</div>
+			{#if panel === 'inspector'}
+				<Inspector />
+			{:else}
+				<ThemePanel />
+			{/if}
 		</div>
 	</div>
 </div>
@@ -109,7 +139,30 @@
 
 	.panels {
 		display: flex;
+		flex-direction: column;
 		min-height: 0;
 		background: var(--ui-panel-bg);
+	}
+
+	.panel-tabs {
+		display: flex;
+		flex: 0 0 auto;
+		border-bottom: 1px solid var(--ui-border);
+	}
+
+	.panel-tabs button {
+		flex: 1;
+		padding: 8px 10px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: transparent;
+		color: var(--ui-text-muted);
+		font-size: 12px;
+		cursor: pointer;
+	}
+
+	.panel-tabs button.active {
+		border-bottom-color: var(--ui-accent);
+		color: var(--ui-text);
 	}
 </style>

@@ -6,6 +6,7 @@
 	 * the `vars` prop.
 	 */
 
+	import { levels as configLevels } from '../config';
 	import { dndMonitor } from '../dnd';
 	import { getSidebarStore } from '../store.svelte';
 	import type { SidebarItem as Item } from '../types';
@@ -43,32 +44,31 @@
 		'--sb-item-radius': '6px',
 		'--sb-font-family': 'inherit',
 		'--sb-font-size': '14px',
-		'--sb-line-height': '1.35'
+		'--sb-font-scale': '1',
+		'--sb-line-height': '1.35',
+		'--sb-guide-color': 'transparent'
 	};
 
+	// Seed per-level defaults from the static config so the component still works
+	// standalone; the theme panel overrides them through the `vars` prop.
+	configLevels.forEach((level, index) => {
+		defaultVars[`--sb-level-${index}-indent`] = `${level.indent}px`;
+		defaultVars[`--sb-level-${index}-font-size`] = `${level.fontSize}px`;
+		defaultVars[`--sb-level-${index}-font-weight`] = `${level.fontWeight}`;
+		defaultVars[`--sb-level-${index}-color`] = defaultVars['--sb-item-color'];
+	});
+
 	const theme = $derived({ ...defaultVars, ...vars });
+
+	/** All variables collapsed into one inline `style` string. */
+	const style = $derived(
+		Object.entries(theme)
+			.map(([property, value]) => `${property}: ${value}`)
+			.join('; ')
+	);
 </script>
 
-<nav
-	class="sidebar"
-	aria-label="Sidebar preview"
-	{@attach dndMonitor()}
-	style:--sb-width={theme['--sb-width']}
-	style:--sb-bg={theme['--sb-bg']}
-	style:--sb-padding={theme['--sb-padding']}
-	style:--sb-border={theme['--sb-border']}
-	style:--sb-radius={theme['--sb-radius']}
-	style:--sb-shadow={theme['--sb-shadow']}
-	style:--sb-item-color={theme['--sb-item-color']}
-	style:--sb-item-hover-bg={theme['--sb-item-hover-bg']}
-	style:--sb-item-active-bg={theme['--sb-item-active-bg']}
-	style:--sb-item-padding={theme['--sb-item-padding']}
-	style:--sb-item-gap={theme['--sb-item-gap']}
-	style:--sb-item-radius={theme['--sb-item-radius']}
-	style:--sb-font-family={theme['--sb-font-family']}
-	style:--sb-font-size={theme['--sb-font-size']}
-	style:--sb-line-height={theme['--sb-line-height']}
->
+<nav class="sidebar" aria-label="Sidebar preview" {style} {@attach dndMonitor()}>
 	<ul class="tree">
 		{#each tree as item (item.id)}
 			<SidebarItem {item} depth={0} {onMenu} />
