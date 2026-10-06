@@ -1,6 +1,6 @@
 import type { SidebarItem } from './types';
 
-export const MAX_DEPTH = 4;
+export const MAX_DEPTH = 7;
 
 /** Where an item is dropped relative to its target. */
 export type DropPosition = 'before' | 'after' | 'inside';
