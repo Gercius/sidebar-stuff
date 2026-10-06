@@ -1,2 +1,115 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<script lang="ts">
+	/**
+	 * Builder shell: toolbar on top, sidebar preview in the middle, inspector on
+	 * the right. The full canvas treatment (background, preview height toggle,
+	 * empty state) is task 9 — this is the minimal host that makes the editing
+	 * actions of task 5 reachable, plus the keyboard shortcuts.
+	 */
+
+	import Inspector from '../lib/builder/Inspector.svelte';
+	import Toolbar from '../lib/builder/Toolbar.svelte';
+	import Sidebar from '../lib/sidebar/components/Sidebar.svelte';
+	import { getSidebarStore } from '../lib/sidebar/store.svelte';
+	import { findItem } from '../lib/sidebar/tree';
+
+	const store = getSidebarStore();
+
+	/** True when the event originates from a text field or editable element. */
+	function isTyping(event: KeyboardEvent): boolean {
+		const target = event.target;
+		return (
+			target instanceof HTMLElement &&
+			(target.closest('input, textarea, select') !== null || target.isContentEditable)
+		);
+	}
+
+	/** Delete an item, confirming first when it has children. */
+	function requestDelete(id: string): void {
+		const location = findItem(store.tree, id);
+		if (!location) return;
+		if (
+			location.item.children.length > 0 &&
+			!confirm(`Delete "${location.item.label}" and its children?`)
+		) {
+			return;
+		}
+		store.remove(id);
+	}
+
+	function onKeydown(event: KeyboardEvent): void {
+		// Native editing keys (including text undo) win while typing.
+		if (isTyping(event)) return;
+
+		const mod = event.ctrlKey || event.metaKey;
+		const key = event.key.toLowerCase();
+
+		if (mod && key === 'z' && !event.shiftKey) {
+			event.preventDefault();
+			store.undo();
+			return;
+		}
+		if (mod && (key === 'y' || (key === 'z' && event.shiftKey))) {
+			event.preventDefault();
+			store.redo();
+			return;
+		}
+		if (event.key === 'Delete' || event.key === 'Backspace') {
+			if (store.selectedId !== null) {
+				event.preventDefault();
+				requestDelete(store.selectedId);
+			}
+			return;
+		}
+		if ((event.key === 'F2' || event.key === 'Enter') && store.selectedId !== null) {
+			// Let focused buttons keep Enter for themselves.
+			const target = event.target;
+			if (target instanceof HTMLElement && target.closest('button') !== null) return;
+			event.preventDefault();
+			store.beginEdit(store.selectedId);
+		}
+	}
+</script>
+
+<svelte:window onkeydown={onKeydown} />
+
+<div class="app">
+	<Toolbar />
+	<div class="body">
+		<main class="canvas">
+			<Sidebar />
+		</main>
+		<div class="panels">
+			<Inspector />
+		</div>
+	</div>
+</div>
+
+<style>
+	.app {
+		display: flex;
+		flex-direction: column;
+		height: 100vh;
+	}
+
+	.body {
+		display: grid;
+		grid-template-columns: 1fr var(--ui-panel-width);
+		flex: 1;
+		min-height: 0;
+	}
+
+	.canvas {
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		padding: 32px;
+		background: var(--ui-canvas-bg);
+		overflow: auto;
+	}
+
+	.panels {
+		display: flex;
+		min-height: 0;
+		background: var(--ui-panel-bg);
+	}
+</style>

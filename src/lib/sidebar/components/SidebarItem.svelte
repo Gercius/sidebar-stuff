@@ -8,6 +8,7 @@
 	import { MAX_DEPTH, levels } from '../config';
 	import { getSidebarStore } from '../store.svelte';
 	import type { SidebarItem as Item } from '../types';
+	import EditableLabel from './EditableLabel.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 
 	interface Props {
@@ -31,9 +32,42 @@
 	/** Children are only allowed where the level permits and depth stays in range. */
 	const canAddChild = $derived(levels[depth]?.canHaveChildren === true && depth + 1 < MAX_DEPTH);
 
+	/** Whether this row currently hosts the inline label editor. */
+	const editing = $derived(store.editingId === item.id);
+
 	/** Left padding combines the level indent with the base item padding. */
 	const indent = $derived(`${level.indent + 8}px`);
+
+	/** First click selects; clicking an already-selected item starts inline editing. */
+	function activate(): void {
+		if (editing) return;
+		if (selected) store.beginEdit(item.id);
+		else store.select(item.id);
+	}
+
+	function beginEdit(): void {
+		if (!editing) store.beginEdit(item.id);
+	}
+
+	function onMainKeydown(event: KeyboardEvent): void {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		// The page-level shortcut handler must not also react to this Enter.
+		event.stopPropagation();
+		activate();
+	}
 </script>
+
+{#snippet rowContent()}
+	{#if item.icon}
+		<span class="icon" aria-hidden="true">{item.icon}</span>
+	{/if}
+	{#if editing}
+		<EditableLabel {item} />
+	{:else}
+		<span class="label">{item.label}</span>
+	{/if}
+{/snippet}
 
 <li class="item">
 	<div class="row" class:selected style:padding-left={indent}>
@@ -60,18 +94,27 @@
 			<span class="chevron-spacer" aria-hidden="true"></span>
 		{/if}
 
-		<button
-			class="main"
-			onclick={() => store.select(item.id)}
-			aria-current={selected ? 'true' : undefined}
-			style:font-size={`${level.fontSize}px`}
-			style:font-weight={level.fontWeight}
-		>
-			{#if item.icon}
-				<span class="icon" aria-hidden="true">{item.icon}</span>
-			{/if}
-			<span class="label">{item.label}</span>
-		</button>
+		{#if editing}
+			<div
+				class="main"
+				style:font-size={`${level.fontSize}px`}
+				style:font-weight={level.fontWeight}
+			>
+				{@render rowContent()}
+			</div>
+		{:else}
+			<button
+				class="main"
+				onclick={activate}
+				ondblclick={beginEdit}
+				onkeydown={onMainKeydown}
+				aria-current={selected ? 'true' : undefined}
+				style:font-size={`${level.fontSize}px`}
+				style:font-weight={level.fontWeight}
+			>
+				{@render rowContent()}
+			</button>
+		{/if}
 
 		<span class="actions">
 			<span class="drag-handle" data-drag-handle aria-hidden="true" title="Drag to reorder">⠿</span>

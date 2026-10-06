@@ -132,6 +132,21 @@ export class SidebarStore {
 		return item;
 	}
 
+	/**
+	 * Insert a new sibling directly below `id`, at the same depth. Returns `null`
+	 * when `id` is unknown.
+	 */
+	addSibling(id: string, label = DEFAULT_LABEL): SidebarItem | null {
+		const location = findItem(this.tree, id);
+		if (!location) return null;
+
+		const item = this.#createItem(label);
+		this.#commit();
+		insertItem(this.tree, location.parent ? location.parent.id : null, location.index + 1, item);
+		this.beginEdit(item.id);
+		return item;
+	}
+
 	/** Remove `id` and its subtree. Returns the removed item, or `null`. */
 	remove(id: string): SidebarItem | null {
 		if (!findItem(this.tree, id)) return null;
