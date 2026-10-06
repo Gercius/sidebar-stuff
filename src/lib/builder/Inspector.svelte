@@ -113,6 +113,39 @@
 			<button type="button" class="danger" onclick={requestDelete}>Delete</button>
 		</div>
 
+		<h2>Move</h2>
+
+		<div class="actions">
+			<button
+				type="button"
+				onclick={() => store.moveUp(item.id)}
+				disabled={!store.canMoveUp(item.id)}
+			>
+				Move up
+			</button>
+			<button
+				type="button"
+				onclick={() => store.moveDown(item.id)}
+				disabled={!store.canMoveDown(item.id)}
+			>
+				Move down
+			</button>
+			<button
+				type="button"
+				onclick={() => store.indent(item.id)}
+				disabled={!store.canIndent(item.id)}
+			>
+				Indent
+			</button>
+			<button
+				type="button"
+				onclick={() => store.outdent(item.id)}
+				disabled={!store.canOutdent(item.id)}
+			>
+				Outdent
+			</button>
+		</div>
+
 		{#if !canAddChild}
 			<p class="hint">No children allowed at this level.</p>
 		{/if}

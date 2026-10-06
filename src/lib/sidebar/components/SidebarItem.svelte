@@ -6,8 +6,10 @@
 	 */
 
 	import { MAX_DEPTH, levels } from '../config';
+	import { draggableItem, dropTargetItem } from '../dnd';
 	import { getSidebarStore } from '../store.svelte';
 	import type { SidebarItem as Item } from '../types';
+	import DropIndicator from './DropIndicator.svelte';
 	import EditableLabel from './EditableLabel.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 
@@ -34,6 +36,12 @@
 
 	/** Whether this row currently hosts the inline label editor. */
 	const editing = $derived(store.editingId === item.id);
+	/** Whether this row is the item currently being dragged. */
+	const dragging = $derived(store.dndSourceId === item.id);
+	/** Drop position feedback for this row, or `null` when it is not the target. */
+	const dropPosition = $derived(store.dndTargetId === item.id ? store.dndTargetPosition : null);
+	/** Whether this row's "⋯" menu is open. */
+	const menuOpen = $derived(store.menuId === item.id);
 
 	/** Left padding combines the level indent with the base item padding. */
 	const indent = $derived(`${level.indent + 8}px`);
@@ -56,6 +64,12 @@
 		event.stopPropagation();
 		activate();
 	}
+
+	/** Run a fallback move from the "⋯" menu, then close the menu. */
+	function runMove(action: () => boolean): void {
+		action();
+		store.openMenu(null);
+	}
 </script>
 
 {#snippet rowContent()}
@@ -70,7 +84,14 @@
 {/snippet}
 
 <li class="item">
-	<div class="row" class:selected style:padding-left={indent}>
+	<div
+		class="row"
+		class:selected
+		class:dragging
+		style:padding-left={indent}
+		{@attach draggableItem(item.id, () => item.label)}
+		{@attach dropTargetItem(item.id, depth)}
+	>
 		{#if hasChildren}
 			<button
 				class="chevron"
@@ -130,8 +151,10 @@
 			{/if}
 			<button
 				class="action"
-				onclick={() => {
+				onclick={(event) => {
+					event.stopPropagation();
 					store.select(item.id);
+					store.openMenu(menuOpen ? null : item.id);
 					onMenu?.(item);
 				}}
 				aria-label={`More actions for ${item.label}`}
@@ -140,6 +163,53 @@
 				⋯
 			</button>
 		</span>
+
+		{#if dropPosition}
+			<DropIndicator position={dropPosition} indent={level.indent + 8} />
+		{/if}
+
+		{#if menuOpen}
+			<button
+				type="button"
+				class="menu-backdrop"
+				aria-label="Close menu"
+				onclick={() => store.openMenu(null)}
+			></button>
+			<div class="item-menu" role="menu">
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!store.canMoveUp(item.id)}
+					onclick={() => runMove(() => store.moveUp(item.id))}
+				>
+					Move up
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!store.canMoveDown(item.id)}
+					onclick={() => runMove(() => store.moveDown(item.id))}
+				>
+					Move down
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!store.canIndent(item.id)}
+					onclick={() => runMove(() => store.indent(item.id))}
+				>
+					Indent
+				</button>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!store.canOutdent(item.id)}
+					onclick={() => runMove(() => store.outdent(item.id))}
+				>
+					Outdent
+				</button>
+			</div>
+		{/if}
 	</div>
 
 	{#if hasChildren && !collapsed}
@@ -157,6 +227,7 @@
 	}
 
 	.row {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 2px;
@@ -174,6 +245,10 @@
 		background: var(--sb-item-active-bg);
 		outline: 2px solid var(--ui-accent);
 		outline-offset: -2px;
+	}
+
+	.row.dragging {
+		opacity: 0.5;
 	}
 
 	.chevron,
@@ -289,5 +364,50 @@
 		margin: 0;
 		padding: 0;
 		list-style: none;
+	}
+
+	.menu-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 40;
+		padding: 0;
+		border: none;
+		background: transparent;
+		cursor: default;
+	}
+
+	.item-menu {
+		position: absolute;
+		top: calc(100% + 2px);
+		right: 0;
+		z-index: 41;
+		display: flex;
+		flex-direction: column;
+		min-width: 132px;
+		padding: 4px;
+		border: 1px solid var(--ui-border);
+		border-radius: var(--ui-radius);
+		background: var(--ui-panel-bg);
+		box-shadow: 0 6px 18px rgb(0 0 0 / 0.16);
+	}
+
+	.item-menu button {
+		padding: 6px 8px;
+		border: none;
+		border-radius: 4px;
+		background: transparent;
+		color: var(--ui-text);
+		font-size: 12px;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.item-menu button:hover:not(:disabled) {
+		background: var(--sb-item-hover-bg);
+	}
+
+	.item-menu button:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
 	}
 </style>

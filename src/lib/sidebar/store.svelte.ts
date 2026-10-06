@@ -51,6 +51,15 @@ export class SidebarStore {
 	/** Id of the item whose label is being edited inline, or `null`. */
 	editingId = $state<string | null>(null);
 
+	/** Id of the item currently being dragged, or `null`. Transient builder feedback. */
+	dndSourceId = $state<string | null>(null);
+	/** Id of the item the drag is currently over, or `null`. */
+	dndTargetId = $state<string | null>(null);
+	/** Drop position for {@link dndTargetId}, or `null` when the drop is not valid. */
+	dndTargetPosition = $state<DropPosition | null>(null);
+	/** Id of the item whose "⋯" menu is open, or `null`. */
+	menuId = $state<string | null>(null);
+
 	/** Undo stack. Uses `$state.raw` so history snapshots are not deeply proxied. */
 	#past = $state.raw<SidebarItem[][]>([]);
 	/** Redo stack. */
@@ -197,6 +206,89 @@ export class SidebarStore {
 		return true;
 	}
 
+	/** Record which item is being dragged; pass `null` when the drag ends. */
+	setDndSource(id: string | null): void {
+		this.dndSourceId = id;
+	}
+
+	/** Record the current drop feedback; pass `null`s to clear it. */
+	setDndTarget(id: string | null, position: DropPosition | null): void {
+		this.dndTargetId = id;
+		this.dndTargetPosition = position;
+	}
+
+	/** Clear every piece of transient drag & drop feedback. */
+	clearDnd(): void {
+		this.dndSourceId = null;
+		this.dndTargetId = null;
+		this.dndTargetPosition = null;
+	}
+
+	/** Open the "⋯" menu for `id`, or close it with `null`. */
+	openMenu(id: string | null): void {
+		this.menuId = id !== null && findItem(this.tree, id) ? id : null;
+	}
+
+	/** Move `id` one place up among its siblings. */
+	moveUp(id: string): boolean {
+		const location = findItem(this.tree, id);
+		if (!location || location.index === 0) return false;
+		const siblings = location.parent ? location.parent.children : this.tree;
+		return this.move(id, siblings[location.index - 1].id, 'before');
+	}
+
+	/** Move `id` one place down among its siblings. */
+	moveDown(id: string): boolean {
+		const location = findItem(this.tree, id);
+		if (!location) return false;
+		const siblings = location.parent ? location.parent.children : this.tree;
+		if (location.index >= siblings.length - 1) return false;
+		return this.move(id, siblings[location.index + 1].id, 'after');
+	}
+
+	/** Nest `id` as the last child of its previous sibling. */
+	indent(id: string): boolean {
+		const location = findItem(this.tree, id);
+		if (!location || location.index === 0) return false;
+		const siblings = location.parent ? location.parent.children : this.tree;
+		return this.move(id, siblings[location.index - 1].id, 'inside');
+	}
+
+	/** Lift `id` out to sit directly after its parent (one level shallower). */
+	outdent(id: string): boolean {
+		const location = findItem(this.tree, id);
+		if (!location || !location.parent) return false;
+		return this.move(id, location.parent.id, 'after');
+	}
+
+	/** Whether {@link moveUp} would do anything for `id`. */
+	canMoveUp(id: string): boolean {
+		const location = findItem(this.tree, id);
+		return location !== null && location.index > 0;
+	}
+
+	/** Whether {@link moveDown} would do anything for `id`. */
+	canMoveDown(id: string): boolean {
+		const location = findItem(this.tree, id);
+		if (!location) return false;
+		const siblings = location.parent ? location.parent.children : this.tree;
+		return location.index < siblings.length - 1;
+	}
+
+	/** Whether {@link indent} would be a valid move for `id`. */
+	canIndent(id: string): boolean {
+		const location = findItem(this.tree, id);
+		if (!location || location.index === 0) return false;
+		const siblings = location.parent ? location.parent.children : this.tree;
+		return canDrop(this.tree, id, siblings[location.index - 1].id, 'inside');
+	}
+
+	/** Whether {@link outdent} would do anything for `id`. */
+	canOutdent(id: string): boolean {
+		const location = findItem(this.tree, id);
+		return location !== null && location.parent !== null;
+	}
+
 	/** Restore the most recent snapshot from the undo stack. */
 	undo(): boolean {
 		if (this.#past.length === 0) return false;
@@ -235,10 +327,11 @@ export class SidebarStore {
 		this.#future = [];
 	}
 
-	/** Drop selection/editing state that no longer matches the current tree. */
+	/** Drop selection/editing/menu state that no longer matches the current tree. */
 	#reconcile(): void {
 		if (this.selectedId !== null && !findItem(this.tree, this.selectedId)) this.selectedId = null;
 		if (this.editingId !== null && !findItem(this.tree, this.editingId)) this.editingId = null;
+		if (this.menuId !== null && !findItem(this.tree, this.menuId)) this.menuId = null;
 	}
 
 	/** Invalidate any in-flight edit session after undo/redo. */

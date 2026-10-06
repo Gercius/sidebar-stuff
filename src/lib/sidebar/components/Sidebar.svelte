@@ -6,6 +6,7 @@
 	 * the `vars` prop.
 	 */
 
+	import { dndMonitor } from '../dnd';
 	import { getSidebarStore } from '../store.svelte';
 	import type { SidebarItem as Item } from '../types';
 	import SidebarItem from './SidebarItem.svelte';
@@ -51,6 +52,7 @@
 <nav
 	class="sidebar"
 	aria-label="Sidebar preview"
+	{@attach dndMonitor()}
 	style:--sb-width={theme['--sb-width']}
 	style:--sb-bg={theme['--sb-bg']}
 	style:--sb-padding={theme['--sb-padding']}
