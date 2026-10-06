@@ -5,10 +5,9 @@
  * - {@link draggableItem} makes a row (via its drag handle) draggable.
  * - {@link dropTargetItem} turns a row into a drop target that publishes a
  *   `reorder-before` / `reorder-after` / `combine` instruction.
- * - {@link dndMonitor} listens globally, drives the transient feedback state and
- *   commits the move with a single undo entry.
+ * - {@link dndMonitor} listens globally, drives the feedback state and commits moves.
  *
- * Invalid operations (own subtree, `MAX_DEPTH` overflow, `!canHaveChildren`) are
+ * Invalid operations (own subtree or `MAX_DEPTH` overflow) are
  * filtered through the hitbox `operations` availability so the UI only ever
  * advertises drop zones that would actually succeed.
  */
@@ -27,9 +26,8 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/list-item';
 import { setCustomNativeDragPreview } from '@atlaskit/pragmatic-drag-and-drop/utils/set-custom-native-drag-preview';
 import type { Attachment } from 'svelte/attachments';
-import { MAX_DEPTH, levels } from './config';
-import { getSidebarStore, type SidebarStore } from './store.svelte';
-import { findItem, isDescendant, subtreeHeight, type DropPosition } from './tree';
+import { store } from './store.svelte';
+import { findItem, isDescendant, MAX_DEPTH, subtreeHeight, type DropPosition } from './tree';
 
 /** Marks the data attached to a dragged sidebar item. */
 const ITEM_TYPE = 'sidebar-item';
@@ -56,7 +54,6 @@ const NONE: Availability = 'not-available';
  * `sourceId`. `targetDepth` is the target's zero-based component depth.
  */
 function operationsFor(
-	store: SidebarStore,
 	sourceId: string,
 	targetId: string,
 	targetDepth: number
@@ -77,12 +74,9 @@ function operationsFor(
 	}
 
 	const height = subtreeHeight(source.item);
-	const targetDepth1 = targetDepth + 1;
-
 	// before/after keep the target's depth; combine nests one level deeper.
-	const canReorder = targetDepth1 + height - 1 <= MAX_DEPTH;
-	const canCombine =
-		levels[targetDepth]?.canHaveChildren === true && targetDepth1 + height <= MAX_DEPTH;
+	const canReorder = targetDepth + height <= MAX_DEPTH;
+	const canCombine = targetDepth + 1 + height <= MAX_DEPTH;
 
 	return {
 		'reorder-before': canReorder ? 'available' : NONE,
@@ -120,10 +114,8 @@ function clearAutoExpand(): void {
 
 /**
  * Expand a collapsed item ~500ms after it becomes the active `combine` target.
- * The change is transient (no history entry) because the following move is the
- * action worth undoing.
  */
-function scheduleAutoExpand(store: SidebarStore, id: string): void {
+function scheduleAutoExpand(id: string): void {
 	if (autoExpandId === id) return;
 	clearAutoExpand();
 
@@ -134,15 +126,12 @@ function scheduleAutoExpand(store: SidebarStore, id: string): void {
 	autoExpandTimer = setTimeout(() => {
 		autoExpandTimer = null;
 		autoExpandId = null;
-		const current = findItem(store.tree, id);
-		if (current && current.item.collapsed === true && current.item.children.length > 0) {
-			store.update(id, { collapsed: false }, { transient: true });
-		}
+		store.expand(id);
 	}, AUTO_EXPAND_DELAY);
 }
 
 /** Push the drop feedback for the outermost active target into the store. */
-function updateFeedback(store: SidebarStore, target: TargetSnapshot | null): void {
+function updateFeedback(target: TargetSnapshot | null): void {
 	if (!target) {
 		store.setDndTarget(null, null);
 		clearAutoExpand();
@@ -158,7 +147,7 @@ function updateFeedback(store: SidebarStore, target: TargetSnapshot | null): voi
 	}
 
 	store.setDndTarget(targetId, positionOf(instruction.operation));
-	if (instruction.operation === 'combine') scheduleAutoExpand(store, targetId);
+	if (instruction.operation === 'combine') scheduleAutoExpand(targetId);
 	else clearAutoExpand();
 }
 
@@ -197,15 +186,13 @@ export function draggableItem(id: string, getLabel: () => string): Attachment<HT
  */
 export function dropTargetItem(id: string, depth: number): Attachment<HTMLElement> {
 	return (element) => {
-		const store = getSidebarStore();
-
 		return dropTargetForElements({
 			element,
 			canDrop: ({ source }) => source.data.type === ITEM_TYPE,
 			getData: ({ input, element: current, source }) => {
 				const sourceId = typeof source.data.id === 'string' ? source.data.id : null;
 				const operations = sourceId
-					? operationsFor(store, sourceId, id, depth)
+					? operationsFor(sourceId, id, depth)
 					: { 'reorder-before': NONE, 'reorder-after': NONE, combine: NONE };
 
 				return attachInstruction(
@@ -220,19 +207,17 @@ export function dropTargetItem(id: string, depth: number): Attachment<HTMLElemen
 /**
  * Global drag monitor. Attach once to any element that stays mounted for the
  * lifetime of the editor: it tracks the dragged source, keeps the indicator
- * state in sync and commits the final move as one undo step.
+ * state in sync and commits the final move.
  */
 export function dndMonitor(): Attachment<HTMLElement> {
 	return () => {
-		const store = getSidebarStore();
-
 		return monitorForElements({
 			canMonitor: ({ source }) => source.data.type === ITEM_TYPE,
 			onDragStart: ({ source }) => {
 				if (typeof source.data.id === 'string') store.setDndSource(source.data.id);
 			},
 			onDrag: ({ location }) => {
-				updateFeedback(store, location.current.dropTargets[0] ?? null);
+				updateFeedback(location.current.dropTargets[0] ?? null);
 			},
 			onDrop: ({ source, location }) => {
 				clearAutoExpand();
